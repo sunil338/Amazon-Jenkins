@@ -1,42 +1,54 @@
 pipeline {
     agent any
+    tools {
+        jdk 'JDK17'        
+        maven 'Maven3'      
+    }
     environment {
-        // Use PATH+EXTRA to append to PATH properly
-        PATH = "/usr/bin:/bin:/opt/homebrew/bin"
+        SONARQUBE = 'sonarqube'  
     }
     stages {
-
-        stage('pull scm new') {
+        stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/PraveenKuber/Amazon-Jenkins.git'
-            }
-        }
-        stage('compile') {
-            steps {
-                sh 'mvn compile'
+                git branch: 'master', url: 'https://github.com/sunil338/Amazon.git'
             }
         }
 
-        stage('build') {
+        stage('Build & Unit Test') {
             steps {
-                 sh 'mvn clean install'
+                sh 'mvn clean install'
             }
         }
 
-        
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonarqube') {
+                    sh 'mvn sonar:sonar -Dsonar.projectKey=myapp'
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Package WAR') {
+            steps {
+                sh 'mvn package'
+                archiveArtifacts artifacts: 'target/*.war', fingerprint: true
+            }
+        }
+
+        stage('Deploy to Tomcat using Ansible') {
+            steps {
+                sh '''
+                  ansible-playbook Amazon/ansible/ansible_playbook.yml -i Amazon/ansible/inventory.ini
+                '''
+            }
+        }
     }
-
-  post{
-
-  success{
-     echo 'Build success'
-  }
-    
-  failure{
-       echo 'Failure in the build'
-   }
-
-  }
-
-
 }
